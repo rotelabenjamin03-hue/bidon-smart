@@ -1,0 +1,226 @@
+index.html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bidón Smart</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #0c1326, #1e3a8a);
+      color: white;
+      min-height: 100vh;
+      padding: 10px;
+    }
+    .container {
+      max-width: 420px;
+      margin: 0 auto;
+      background: rgba(22, 33, 62, 0.98);
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+      border: 1px solid #60a5fa;
+    }
+    header {
+      background: linear-gradient(to right, #1e40af, #3b82f6);
+      padding: 25px 15px;
+      text-align: center;
+    }
+    .logo { 
+      font-size: 34px; 
+      margin-bottom: 8px; 
+      font-weight: bold;
+    }
+    .tank-container { padding: 35px 20px 20px; text-align: center; }
+    .tank {
+      width: 180px;
+      height: 300px;
+      border: 18px solid #22c55e;
+      border-radius: 40px;
+      margin: 0 auto;
+      position: relative;
+      overflow: hidden;
+      background: #1e2937;
+    }
+    .water {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      background: linear-gradient(to top, #3b82f6, #93c5fd);
+      transition: height 1s ease;
+    }
+    .percentage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 55px;
+      font-weight: bold;
+      z-index: 2;
+    }
+    .buttons {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    button {
+      padding: 18px;
+      font-size: 18px;
+      border: none;
+      border-radius: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .rain-btn { background: #0ea5e9; color: white; }
+    .rain-btn.active { background: #eab308; animation: pulse 2s infinite; }
+    .desaguar { background: #ef4444; color: white; height: 75px; font-size: 21px; }
+    @keyframes pulse { 50% { opacity: 0.75; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">🌧️ Bidón Smart</div>
+      <p style="margin-top:5px; opacity:0.9;">Monitoreo Inteligente de Agua</p>
+    </header>
+
+    <div style="padding:12px; text-align:center; background:#1e2937; font-weight:bold;" id="rainStatus">☀️ Sin lluvia</div>
+
+    <div class="tank-container">
+      <div class="tank" id="tank">
+        <div class="water" id="water"></div>
+        <div class="percentage" id="percent">45%</div>
+      </div>
+      <div style="margin-top:25px; font-size:24px;">
+        <strong id="litros">90 / 200 L</strong>
+        <div id="status" style="font-size:20px; margin-top:8px;">Normal</div>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button class="rain-btn" id="rainBtn" onclick="toggleRain()">🌧️ Iniciar Lluvia</button>
+      <button class="desaguar" onclick="desaguar()">🪣 Activar Desagüe</button>
+      
+      <div style="display:flex; gap:12px;">
+        <button onclick="cambiarNivel(20)" style="flex:1; background:#334155;">➕ Agregar Agua</button>
+        <button onclick="cambiarNivel(-20)" style="flex:1; background:#334155;">➖ Quitar Agua</button>
+      </div>
+      
+      <button onclick="resetearApp()" style="background:#64748b;">🔄 Reiniciar Nivel</button>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.9); align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:#1e2937; padding:25px; border-radius:20px; width:90%; max-width:340px; text-align:center;">
+      <h3 id="modalTitle"></h3>
+      <p id="modalMessage"></p>
+      <button onclick="closeModal()" style="margin-top:20px; padding:15px 40px; background:#3b82f6; color:white; border:none; border-radius:12px; width:100%;">OK</button>
+    </div>
+  </div>
+
+  <script>
+    let nivel = 90, capacidad = 200, estaLloviendo = false, rainInterval, ultimaNotificacion = "";
+
+    function cargarDatos() {
+      const guardado = localStorage.getItem('nivelBidon');
+      if (guardado) nivel = parseFloat(guardado);
+    }
+
+    function guardarDatos() {
+      localStorage.setItem('nivelBidon', nivel);
+    }
+
+    function actualizarTanque() {
+      const p = Math.min(100, Math.max(0, Math.round((nivel / capacidad) * 100)));
+      document.getElementById('water').style.height = p + '%';
+      document.getElementById('percent').textContent = p + '%';
+      document.getElementById('litros').textContent = `${nivel} / ${capacidad} L`;
+
+      if (p <= 5 && ultimaNotificacion !== "vacio") {
+        showModal("🪣 Bidón Vacío", "El bidón está casi vacío.");
+        ultimaNotificacion = "vacio";
+      } else if (p >= 45 && p <= 55 && ultimaNotificacion !== "mitad") {
+        showModal("📍 Nivel Medio", "El bidón está a la mitad.");
+        ultimaNotificacion = "mitad";
+      } else if (p >= 90 && ultimaNotificacion !== "lleno") {
+        showModal("⚠️ ¡Alerta de Rebalse!", "El bidón está muy lleno.");
+        ultimaNotificacion = "lleno";
+      }
+
+      const tank = document.getElementById('tank');
+      const status = document.getElementById('status');
+      if (p <= 5) { tank.style.borderColor = "red"; status.style.color = "red"; status.textContent = "¡VACÍO!"; }
+      else if (p >= 90) { tank.style.borderColor = "orange"; status.style.color = "orange"; status.textContent = "¡REBALSE!"; }
+      else if (p >= 45 && p <= 55) { tank.style.borderColor = "#eab308"; status.style.color = "#eab308"; status.textContent = "Nivel Medio"; }
+      else { tank.style.borderColor = "#22c55e"; status.style.color = "#22c55e"; status.textContent = "Normal"; }
+
+      guardarDatos();
+    }
+
+    function toggleRain() {
+      estaLloviendo = !estaLloviendo;
+      const btn = document.getElementById('rainBtn');
+      const status = document.getElementById('rainStatus');
+      if (estaLloviendo) {
+        btn.textContent = "🌧️ Detener Lluvia";
+        btn.classList.add('active');
+        status.textContent = "🌧️ Lluvia activa";
+        rainInterval = setInterval(() => {
+          if (nivel < capacidad) nivel += 6;
+          actualizarTanque();
+        }, 600);
+      } else {
+        clearInterval(rainInterval);
+        btn.textContent = "🌧️ Iniciar Lluvia";
+        btn.classList.remove('active');
+        status.textContent = "☀️ Sin lluvia";
+      }
+    }
+
+    function cambiarNivel(c) {
+      nivel = Math.max(0, Math.min(capacidad, nivel + c));
+      actualizarTanque();
+    }
+
+    function desaguar() {
+      if (confirm("¿Estás segura de activar el desagüe?")) {
+        clearInterval(rainInterval);
+        document.getElementById('rainBtn').classList.remove('active');
+        document.getElementById('rainStatus').textContent = "☀️ Sin lluvia";
+        let temp = nivel;
+        const int = setInterval(() => {
+          temp -= 30;
+          if (temp <= 0) { clearInterval(int); nivel = 0; }
+          else nivel = temp;
+          actualizarTanque();
+        }, 130);
+      }
+    }
+
+    function resetearApp() {
+      if (confirm("¿Reiniciar el nivel del bidón?")) {
+        nivel = 90;
+        ultimaNotificacion = "";
+        actualizarTanque();
+      }
+    }
+
+    function showModal(title, msg) {
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalMessage').textContent = msg;
+      document.getElementById('modal').style.display = 'flex';
+    }
+    function closeModal() {
+      document.getElementById('modal').style.display = 'none';
+    }
+
+    // Iniciar
+    cargarDatos();
+    actualizarTanque();
+  </script>
+</body>
+</html>
